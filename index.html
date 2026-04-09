@@ -9,7 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lato:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400&display=swap" rel="stylesheet">
 
 <style>
 :root {
@@ -484,6 +484,7 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
 .mn-table tbody td.lbl {
   background: linear-gradient(180deg, var(--sage) 0%, #476E40 100%) !important;
   color: white !important;
+  font-family: 'Lato', sans-serif;
   font-weight: 900;
   font-size: 11.5px;
   letter-spacing: 2.5px;
@@ -495,6 +496,7 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
   transform: rotate(0deg);
   padding: 10px 4px;
   border: 1px solid #3D5E38;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Special meal cell */
@@ -1003,12 +1005,16 @@ const S = {
 //   - Within a section:  line spacing ≈ 14.5 pt
 //   - Between sections:  gap         ≈ 18.2 pt  (the table cell border)
 //   - Dates header gap:  17.1 pt at JS_top ≈ 93  → excluded by position filter
-//   - Footer area gap:   22+ pt at JS_top > 450  → excluded by position filter
+//
+// DIN bottom is NOT detected here — a generous fixed ceiling (540 pt) is used
+// instead, and footer text is stripped afterwards by FOOTER_RE.  Attempting to
+// detect the DIN→footer gap dynamically is unreliable because normal 14.5 pt
+// line spacing triggers the same threshold, causing dinner items to be cut off.
 //
 // This approach reads only text items (no drawing ops), so it works regardless
 // of whether the PDF uses Form XObjects for its table structure.
 //
-// Returns { brkBottom, lunBottom } or null if fewer than 2 gaps are found.
+// Returns { brkBottom, lunBottom } or null if fewer than 2 meal gaps are found.
 function detectBoundariesFromGaps(items, ph) {
   const topSet = new Set();
   for (const item of items) {
@@ -1022,9 +1028,8 @@ function detectBoundariesFromGaps(items, ph) {
   const sortedTops = Array.from(topSet).sort((a, b) => a - b);
   if (sortedTops.length < 10) return null;
 
-  // Find gaps > 16 pt in the meal-content zone (120–450 pt)
-  // Excludes: dates-header gap (17.1 pt @ ~93, outside range) and
-  //           footer gap (22+ pt @ >450, outside range)
+  // Find the 2 meal-section dividers (BRK/LUN and LUN/DIN)
+  // in the primary content zone 120–450 pt.
   const sectionGaps = [];
   for (let i = 1; i < sortedTops.length; i++) {
     const gap = sortedTops[i] - sortedTops[i - 1];
@@ -1033,16 +1038,14 @@ function detectBoundariesFromGaps(items, ph) {
       sectionGaps.push({ pos, gap });
     }
   }
-
-  sectionGaps.sort((a, b) => a.pos - b.pos);   // order top→bottom
-
+  sectionGaps.sort((a, b) => a.pos - b.pos);
   if (sectionGaps.length < 2) return null;
 
-  // boundary = gap_start + 1 pt  (gap_start is last line of prior section,
-  // verified to match the true cell rect boundary within ±0.2 pt)
+  console.log(`[parseGrid] Gap-based: BRK/LUN=${(sectionGaps[0].pos+1).toFixed(1)}, LUN/DIN=${(sectionGaps[1].pos+1).toFixed(1)}`);
+
   return {
     brkBottom: sectionGaps[0].pos + 1,
-    lunBottom: sectionGaps[1].pos + 1,
+    lunBottom:  sectionGaps[1].pos + 1,
   };
 }
 
@@ -1100,7 +1103,7 @@ function parseGrid(items, ph, pw) {
   if (gaps) {
     brkLunBoundary = gaps.brkBottom;
     lunDinBoundary = gaps.lunBottom;
-    console.log(`[parseGrid] Gap-based: BRK/LUN=${brkLunBoundary.toFixed(1)}, LUN/DIN=${lunDinBoundary.toFixed(1)}`);
+    // logging done inside detectBoundariesFromGaps
   } else {
     // Fallback: scan for K (last char of BRK label) and N (last char of LUN label)
     let kLastTop = 0, nLunLastTop = 0;
@@ -1123,11 +1126,14 @@ function parseGrid(items, ph, pw) {
     console.log(`[parseGrid] Fallback label formula: BRK/LUN=${brkLunBoundary.toFixed(1)}, LUN/DIN=${lunDinBoundary.toFixed(1)}`);
   }
 
+  // DIN ceiling is intentionally generous (540 pt) to capture all dinner content
+  // regardless of how many lines each cell contains.  Footer text that may fall
+  // within this zone is removed by the FOOTER_RE post-process pass below.
   const ROWS = {
     dates: [84,             100            ],
     BRK:   [100,            brkLunBoundary ],
     LUN:   [brkLunBoundary, lunDinBoundary ],
-    DIN:   [lunDinBoundary, 486            ],
+    DIN:   [lunDinBoundary, 540            ],
   };
 
   // ── Pass 2: bucket content items into rows × day-columns ──
@@ -1197,6 +1203,25 @@ function parseGrid(items, ph, pw) {
 
     g[row][ci] = lineTexts.join('\n');
   }
+
+  // ── Post-process: strip static footer/footnote lines that the PDF parser
+  //    may bucket into meal cells (most commonly Monday DIN, col 0).
+  //    These strings appear in the template's footer and are never actual menu items.
+  //    Patterns are broad enough to catch partial fragments when the footer text
+  //    is split across separate pdf.js text items / visual lines.
+  const FOOTER_RE = /milk offered|offered at every|at every meal|every meal|always available|snack list|refer to|file this copy|dietitian|signature/i;
+  for (const meal of ['BRK', 'LUN', 'DIN']) {
+    for (let i = 0; i < 7; i++) {
+      if (g[meal][i]) {
+        g[meal][i] = g[meal][i]
+          .split('\n')
+          .filter(line => !FOOTER_RE.test(line))
+          .join('\n')
+          .trim();
+      }
+    }
+  }
+
   return g;
 }
 
