@@ -127,7 +127,7 @@ body {
 }
 .upload-zone .upload-icon { font-size: 36px; margin-bottom: 8px; }
 .upload-zone .upload-text { font-size: 14px; color: var(--text-mid); line-height: 1.5; }
-.upload-zone .upload-sub  { font-size: 12px; color: #AAA; margin-top: 4px; }
+.upload-zone .upload-sub  { font-size: 12px; color: #AAA; margin-top: 0px; }
 .upload-zone .file-name   { margin-top: 10px; font-weight: 700; color: var(--sage); font-size: 13px; }
 .upload-zone input        { display: none; }
 
@@ -136,7 +136,7 @@ label {
   display: block;
   font-size: 12px; font-weight: 700;
   color: var(--brown-mid);
-  margin-bottom: 5px; margin-top: 12px;
+  margin-bottom: 5px; margin-top: 0px;
   text-transform: uppercase; letter-spacing: 0.5px;
 }
 label:first-child { margin-top: 0; }
@@ -162,7 +162,7 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
 
 /* ── DATE NOTICE ── */
 .date-notice {
-  font-size: 11px; color: #999; margin-top: 4px; font-style: italic;
+  font-size: 11px; color: #999; margin-top: 0px; font-style: italic;
 }
 .date-notice.warn { color: #C0392B; }
 
@@ -437,6 +437,7 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
   border-collapse: collapse;
   border: 2px solid var(--brown);
   font-size: 10.5px;
+  margin-bottom: 16px;
 }
 
 /* Date header */
@@ -475,10 +476,17 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
   color: var(--text-dark);
   line-height: 1.55;
   background: #FFFEF8;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .mn-table tbody .mr:nth-child(2) td:not(.lbl) { background: #FFFEF8; }
 .mn-table tbody .mr:nth-child(4) td:not(.lbl) { background: #FDF6E8; }
 .mn-table tbody .mr:nth-child(6) td:not(.lbl) { background: #FFFEF8; }
+
+/* Constrain meal row heights to prevent overflow */
+.mn-table tbody .mr {
+  min-height: 120px;
+}
 
 /* Meal label cell (left column) */
 .mn-table tbody td.lbl {
@@ -504,7 +512,6 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
   background: var(--special-bg) !important;
   border: 2px solid var(--honey) !important;
   position: relative;
-  overflow: hidden;
 }
 .mn-table td.special-cell::before {
   content: '';
@@ -533,10 +540,14 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
 /* Footnotes section */
 .mn-footnotes {
   display: flex;
+  position: relative;
+  clear: both;
+  z-index: 10;
+  clear: both;
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  margin-top: 4px;
+  margin-top: 0px;
   margin-bottom: 6px;
   border-top: 1px solid var(--border-gold);
 }
@@ -666,7 +677,7 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
 }
 .rep-legend[open] summary::before { transform: rotate(90deg); }
 .rep-legend-body {
-  margin-top: 12px;
+  margin-top: 0px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px 20px;
@@ -1209,7 +1220,7 @@ function parseGrid(items, ph, pw) {
   //    These strings appear in the template's footer and are never actual menu items.
   //    Patterns are broad enough to catch partial fragments when the footer text
   //    is split across separate pdf.js text items / visual lines.
-  const FOOTER_RE = /milk offered|offered at every|at every meal|every meal|always available|snack list|refer to|file this copy|dietitian|signature/i;
+  const FOOTER_RE = /milk offered|offered at every|at every meal|every meal|always available|snack list|refer to|file this copy|dietitian|signature|week \d+/i;
   for (const meal of ['BRK', 'LUN', 'DIN']) {
     for (let i = 0; i < 7; i++) {
       if (g[meal][i]) {
@@ -1385,7 +1396,7 @@ function buildMenu(dates, weekNum, season, modMap) {
         : '';
       const cls = (isSpecial && highlight ? 'special-cell' : '') + repCls;
 
-      cells += `<td class="${cls}" style="position:relative;min-height:30px;">
+      cells += `<td class="${cls}" style="position:relative;min-height:35px;">
         ${repIcon}
         ${isSpecial ? `<span class="special-badge">${emoji}</span>` : ''}
         ${isSpecial ? `<span class="special-tag">★ Special</span><br>` : ''}
@@ -1419,11 +1430,13 @@ function buildMenu(dates, weekNum, season, modMap) {
     ${mealRows}
   </tbody>
 </table>
+<div style="clear:both;height:0;"></div>
 <div class="mn-footnotes">
   <div class="fn-label">${seasonShort} · Week ${weekNum}</div>
   <div class="fn-notes">
     <div>🥛 Milk offered at every meal</div>
     <div>Refer to Always Available Snack list for other options</div>
+  </div>
   </div>
 </div>
 <div class="mn-footer">
