@@ -503,26 +503,28 @@ textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
 .mn-table tbody .mr.snack-row td.lbl {
   background: linear-gradient(180deg, #C99A4A 0%, #A57A30 100%) !important;
   border: 1px solid #8C6520;
-  letter-spacing: 2px;
 }
 
-/* Meal label cell (left column) */
+/* Meal label cell (left column) — letters stacked as block spans
+   (writing-mode was unreliable in html2canvas; the middle letter of
+   LUN/DIN/SNK was being clipped or overlapped in the generated PDF). */
 .mn-table tbody td.lbl {
   background: linear-gradient(180deg, var(--sage) 0%, #476E40 100%) !important;
   color: white !important;
   font-family: 'Lato', sans-serif;
   font-weight: 900;
-  font-size: 14px;
-  letter-spacing: 3px;
+  font-size: 15px;
   text-align: center;
   vertical-align: middle;
   width: 32px;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  transform: rotate(0deg);
-  padding: 12px 5px;
+  padding: 10px 4px;
   border: 1px solid #3D5E38;
   -webkit-font-smoothing: antialiased;
+}
+.mn-table tbody td.lbl span {
+  display: block;
+  line-height: 1.18;
+  letter-spacing: 0;
 }
 
 /* Special meal cell */
@@ -1445,9 +1447,12 @@ function buildMenu(dates, weekNum, season, modMap) {
   // Meal rows — iterate MEAL_ROWS so the Snack row (SNK) renders alongside BRK/LUN/DIN
   let mealRows = '';
   MEAL_ROWS.forEach(meal => {
-    const labelText = meal === 'SNK' ? 'SNK' : meal;
+    // Render each letter as its own <span> stacked vertically — this avoids
+    // writing-mode/letter-spacing rendering bugs in html2canvas (the PDF generator)
+    // that were clipping the middle letter of LUN/DIN/SNK in the printed PDF.
+    const labelHTML = meal.split('').map(c => `<span>${c}</span>`).join('');
     const rowExtra  = meal === 'SNK' ? ' snack-row' : '';
-    let cells = `<td class="lbl">${labelText}</td>`;
+    let cells = `<td class="lbl">${labelHTML}</td>`;
     for (let i = 0; i < 7; i++) {
       const key = `${i}_${meal}`;
       const mod = modMap[key];
